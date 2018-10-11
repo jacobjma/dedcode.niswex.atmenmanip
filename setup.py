@@ -10,11 +10,11 @@ from distutils.extension import Extension
 
 setuptools.setup(
     name="dedcode_atmenmanip",
-    version="0.1.3",
+    version="0.1.4",
     author="Andreas Postl",
     author_email="dedicated.codes@gmail.com",
     description= "A Nion swift plug-in for atom manipulation using an STEM (ATMEN project)",
-    packages=["nionswift_plugin.atmenmanip", "atmenmanip-demo"],
+    packages=["nionswift_plugin.atmenmanip", "atmenmanip_demo"],
     py_modules = [],
     ext_modules = [],
     install_requires=["dedcode_imgrecog", "dedcode_pathfind",\
