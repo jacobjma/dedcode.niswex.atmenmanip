@@ -297,6 +297,7 @@ class AtomManipDelegate:
         self.t1.start()
         
     # Sites and bonds
+    #TODO: secure that site-graphics assignment stays consistent
     def set_sites_and_bonds(self):
         if self.processed_data_item is None:
             print("Aborted! Determine maxima first.")
@@ -307,6 +308,7 @@ class AtomManipDelegate:
         
         maxima = self.picobj.maxima[-1] #TODO see above
         indx_foreigns = self.picobj.indx_substitutionals[-1] #TODO: change array-behavior
+        print("indices foreigns  " + str(indx_foreigns))
         
         def thread_this():
             #TODO
@@ -316,27 +318,14 @@ class AtomManipDelegate:
 
             # Create and assign sites and bonds
             self.sites = []
-            for i in range(len(maxima)):
-                thissite = pf.Site(maxima[i][0], maxima[i][1],
-                                          max_bond_radius = self.maxlength)
-                self.sites.append(thissite)
-                print("Index: %r" % i)
-                print("Site: %r" % thissite)
-                print("Region/Graphics object: %r" % self.processed_data_item.regions[i])
-                print("Writing site to graphics object in new field")
-                self.processed_data_item.regions[i].dedcode_site = thissite #TODO: rework!!! unsure if correct point_graphics is taken.
-                print("Trying to read site from new field in graphics object...")
-                print(self.processed_data_item.regions[i].dedcode_site)
-                print("success?!")
-            bonds = pf.Bonds(self.sites, self.maxlength)
             
             with self.dc.library.data_ref_for_data_item(self.processed_data_item):
                 shape = self.processed_data_item.xdata.data_shape
                 ellipse_relative_size = 0.05
                 
-                # Delete old result
+                # Delete old 
                 for region in self.processed_data_item.regions:
-                    if region.type in ('line-region', 'rectangle-region'):
+                    if region.type in ('line-region', 'rectangle-region', 'ellipse-region'):
                         try:
                             self.processed_data_item.remove_region(region)
                         except:
@@ -344,16 +333,69 @@ class AtomManipDelegate:
                 self.sources = np.array([])
                 self.targets = np.array([])
                 
+                # Set sites
+                print("======= Set sites =======")
+                for i in range(len(maxima)):
+                #for i in range(10): # previous line commented for << demonstration >>
+                    thissite = pf.Site(maxima[i][0], maxima[i][1],
+                                          max_bond_radius = self.maxlength)
+                    self.sites.append(thissite)
+                    print(self.processed_data_item.regions[i].uuid)
+                    self.sites[-1].uuid_graphics = self.processed_data_item.regions[i].uuid #TODO: rework! not sure whether correct point_graphics is taken.
+                    print("Index: %r" % i)
+                    print("Site: %r" % thissite)
+                    print("Data item: %r" % self.processed_data_item.title)
+                    print("Region/Graphics object: %r" % self.processed_data_item.regions[i])
+                    print("Writing site to graphics object in new field")
+
+                    self.processed_data_item.regions[i].graphic_id = len(self.sites) #TODO: maybe change somehow. Attribute graphic_id is abused
+                    
+                    print("Trying to read site from new field in graphics object...")
+                    
+                    try:
+                        print(self.processed_data_item.regions[i].dedcode_site)
+                    except:
+                        print("1. could not read new attribute")
+                            
+                    target_region = self.processed_data_item.regions[i]
+                    target_region.dedcode_site = thissite
+                    
+                    try:
+                        print(self.processed_data_item.regions[i].dedcode_site)
+                        print(self.__api.library.get_graphic_by_uuid(self.sites[0].uuid_graphics))
+                        print(self.__api.library.get_graphic_by_uuid(self.sites[0].uuid_graphics))
+                    except:
+                        print("2. could not read new attribute")
+                        
+                    try:
+                        print(self.processed_data_item.regions[0].dedcode_site)
+                    except:
+                        print("3. could not read new attribute")
+                        
+                    print("success of iteration %r !" % i)
+                    print(self.sites)
+                    print("----")
+                
+                for i in range(10):
+                    print(self.sites[i].uuid_graphics)
+
+                print("======= Set bonds =======")
+                bonds = pf.Bonds(self.sites, self.maxlength)
+                #return # only return for << demonstration >>
+                
+                # Set and display automatically detected sources
                 for i in indx_foreigns:
                     loc = maxima[i] #TODO: probably change to self.sites[i].coords
                     #TODO: rework!!! unsure if correct point_graphics is taken
-                    thisatom = pf.Atom(
-                            self.processed_data_item.regions[i].dedcode_site, 'dummy-element')
-                    self.sources = np.append(self.sources, thisatom) 
+                    thisatom = pf.Atom(self.sites[i], 'dummy-element')
+                    self.sources = np.append(self.sources, thisatom)
                     reg = self.processed_data_item.add_rectangle_region(
                             loc[0]/shape[0], loc[1]/shape[1],
                             ellipse_relative_size, ellipse_relative_size)
-                    reg.dedcode_atom = thisatom #TODO: see above
+                    reg.graphic_id = np.size(self.sources)
+                    self.sources[-1].uuid_graphic = reg.uuid #TODO: see above
+                
+                # Set and display bonds
                 for b in bonds.members:
                     y1 = b.coords()[0][0]
                     x1 = b.coords()[0][1]
@@ -361,6 +403,7 @@ class AtomManipDelegate:
                     x2 = b.coords()[1][1]
                     # shorten the display of the bond
                     w = (1 - self.drawn_fraction) / 2 # weight of the other position
+                    #TODO: This does not work exact. Swift issue?
                     y1 = y1*(1-w) + y2*w
                     x1 = x1*(1-w) + x2*w
                     y2 = y1*w + y2*(1-w)
@@ -390,12 +433,14 @@ class AtomManipDelegate:
             ellipse_relative_size = 0.05
             for s in selection:
                 loc = s.position
-                thisatom = pf.Atom(s.specifier.dedcode_site, 'dummy-element')
+                thisatom = pf.Atom(self.sites[eval(s.graphic_id)], 'dummy-element')
                 self.sources = np.append(self.sources, thisatom) 
                 reg = self.processed_data_item.add_rectangle_region(
                         loc[0], loc[1],
                         ellipse_relative_size, ellipse_relative_size)
-                reg.specifier.dedcode_atom = thisatom #TODO: see above
+                reg.graphic_id = np.size(self.sources) #TODO: attribute graphic_id is abused
+                self.sources[-1].uuid_graphic = reg.uuid #TODO: see above
+                
         self.t3 = threading.Thread(target = thread_this)
         self.t3.start()
         
@@ -415,12 +460,16 @@ class AtomManipDelegate:
             ellipse_relative_size = 0.05
             for s in selection:
                 loc = s.position
-                thissite = s.specifier.dedcode_site
+                idx_site = eval(s.graphic_id)
+                thissite = self.sites[idx_site]
                 self.targets = np.append(self.targets, thissite)
                 reg = self.processed_data_item.add_ellipse_region(
                         loc[0], loc[1],
                         ellipse_relative_size, ellipse_relative_size)
-                reg.specifier.dedcode_site = thissite
+                reg.graphic_id = idx_site #TODO: attribute graphic_id is abused
+                #TODO: not sure whether idx of self.targets-array or self.sites-array should be taken
+                self.targets[-1].uuid_graphic = reg.uuid #TODO: see above
+                
         self.t4 = threading.Thread(target = thread_this)
         self.t4.start()  
     
