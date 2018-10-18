@@ -297,7 +297,7 @@ class AtomManipDelegate:
         self.t1.start()
         
     # Sites and bonds
-    #TODO: secure that site-graphics assignment stays consistent
+    #TODO: secure that site-graphics assignment stays consistent, look near the comment lines "# Mutual assignment"
     def set_sites_and_bonds(self):
         if self.processed_data_item is None:
             print("Aborted! Determine maxima first.")
@@ -336,52 +336,17 @@ class AtomManipDelegate:
                 # Set sites
                 print("======= Set sites =======")
                 for i in range(len(maxima)):
-                #for i in range(10): # previous line commented for << demonstration >>
                     thissite = pf.Site(maxima[i][0], maxima[i][1],
                                           max_bond_radius = self.maxlength)
                     self.sites.append(thissite)
-                    print(self.processed_data_item.regions[i].uuid)
+                    
+                    # Mutual assignment
                     self.sites[-1].uuid_graphics = self.processed_data_item.regions[i].uuid #TODO: rework! not sure whether correct point_graphics is taken.
-                    print("Index: %r" % i)
-                    print("Site: %r" % thissite)
-                    print("Data item: %r" % self.processed_data_item.title)
-                    print("Region/Graphics object: %r" % self.processed_data_item.regions[i])
-                    print("Writing site to graphics object in new field")
-
                     self.processed_data_item.regions[i].graphic_id = len(self.sites) #TODO: maybe change somehow. Attribute graphic_id is abused
-                    
-                    print("Trying to read site from new field in graphics object...")
-                    
-                    try:
-                        print(self.processed_data_item.regions[i].dedcode_site)
-                    except:
-                        print("1. could not read new attribute")
-                            
-                    target_region = self.processed_data_item.regions[i]
-                    target_region.dedcode_site = thissite
-                    
-                    try:
-                        print(self.processed_data_item.regions[i].dedcode_site)
-                        print(self.__api.library.get_graphic_by_uuid(self.sites[0].uuid_graphics))
-                        print(self.__api.library.get_graphic_by_uuid(self.sites[0].uuid_graphics))
-                    except:
-                        print("2. could not read new attribute")
-                        
-                    try:
-                        print(self.processed_data_item.regions[0].dedcode_site)
-                    except:
-                        print("3. could not read new attribute")
-                        
-                    print("success of iteration %r !" % i)
-                    print(self.sites)
-                    print("----")
-                
-                for i in range(10):
-                    print(self.sites[i].uuid_graphics)
 
+                # Set bonds
                 print("======= Set bonds =======")
                 bonds = pf.Bonds(self.sites, self.maxlength)
-                #return # only return for << demonstration >>
                 
                 # Set and display automatically detected sources
                 for i in indx_foreigns:
@@ -392,6 +357,8 @@ class AtomManipDelegate:
                     reg = self.processed_data_item.add_rectangle_region(
                             loc[0]/shape[0], loc[1]/shape[1],
                             ellipse_relative_size, ellipse_relative_size)
+                    
+                    # Mutual assignment
                     reg.graphic_id = np.size(self.sources)
                     self.sources[-1].uuid_graphic = reg.uuid #TODO: see above
                 
@@ -438,6 +405,8 @@ class AtomManipDelegate:
                 reg = self.processed_data_item.add_rectangle_region(
                         loc[0], loc[1],
                         ellipse_relative_size, ellipse_relative_size)
+                
+                # Mutual assignment
                 reg.graphic_id = np.size(self.sources) #TODO: attribute graphic_id is abused
                 self.sources[-1].uuid_graphic = reg.uuid #TODO: see above
                 
@@ -466,6 +435,8 @@ class AtomManipDelegate:
                 reg = self.processed_data_item.add_ellipse_region(
                         loc[0], loc[1],
                         ellipse_relative_size, ellipse_relative_size)
+                
+                # Mutual assignment
                 reg.graphic_id = idx_site #TODO: attribute graphic_id is abused
                 #TODO: not sure whether idx of self.targets-array or self.sites-array should be taken
                 self.targets[-1].uuid_graphic = reg.uuid #TODO: see above
