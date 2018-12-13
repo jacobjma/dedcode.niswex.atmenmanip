@@ -8,14 +8,16 @@ import threading
 import time
 import numpy as np
 import copy
-#from matplotlib import pyplot as plt
-from scipy import ndimage
+from matplotlib import pyplot as plt
+#from scipy import ndimage
 #import cv2 # for noise filters
 #import imp
 
 # specific application classes
 from pathfindlib import pfl_interface as pf
+from pathfindlib import pfl_plot as pfplt
 from imgrecoglib import irl_interface as ir
+from . import auto_manipulator as am
 
 # third party libraries
 # None
@@ -34,11 +36,12 @@ class AtomManipDelegate:
         self.panel_positions = ["left", "right"]
         self.panel_position = "right"
         
-        # GUI default values
-        self.sigma = 10
-        self.noise_tolerance = 0.002
-        self.maxlength = 50 # in pixels
+        # Default values
+        self.sigma = 9 # Kernel of the Gaussian blut in pixels
+        self.noise_tolerance = 1e-5
+        self.maxlength = 50 # Bond max length in pixels
         self.drawn_fraction = 1/3
+        
         # GUI elements
         self.sigma_field = None
         self.noise_tolerance_field = None    
@@ -46,15 +49,20 @@ class AtomManipDelegate:
         self.drawn_fraction_field = None
         self.find_maxima_button = None
         self.set_sites_and_bonds_button = None
+        self.auto_detect_sources_button = None
         self.add_sources_button = None
         self.add_targets_button = None
         self.find_paths_button = None
+        self.open_conceptional_plot_button = None
+        self.call_auto_manipulator_button = None
+        self.stop_auto_manipulator_button = None
         
         # Objects that are needed to be saved
         self.source_data_item = None
         self.processed_data_item = None
         self.picobj = None
         self.sites = None
+        self.bonds = None
         self.sources = None
         self.targets = None
         self.paths = None
@@ -65,6 +73,8 @@ class AtomManipDelegate:
         self.t3 = None
         self.t4 = None
         self.t5 = None
+        
+        self.t6 = None
 
     def create_panel_widget(self, ui, document_controller):
         self.dc = document_controller
@@ -107,6 +117,8 @@ class AtomManipDelegate:
             self.process_and_show()
         def set_sites_bonds_clicked():
             self.set_sites_and_bonds()
+        def auto_detect_sources_clicked():
+            self.auto_detect_sources()
         def add_sources_clicked():
             selection = self.dc.target_display.selected_graphics
             self.add_sources(selection)
@@ -115,6 +127,13 @@ class AtomManipDelegate:
             self.add_targets(selection)
         def find_paths_clicked():
             self.find_paths()
+        def open_conceptional_plot_clicked():
+            self.open_conceptional_plot()
+        def call_auto_manipulator_clicked():
+            self.call_auto_manipulator()
+        def stop_auto_manipulator_clicked():
+            #self.stop_auto_manipulator()
+            pass
             
         # GUI buttons
         self.find_maxima_button = ui.create_push_button_widget('Determine Maxima')
@@ -122,6 +141,9 @@ class AtomManipDelegate:
         
         self.set_sites_and_bonds_button = ui.create_push_button_widget('Set Sites and Bonds')
         self.set_sites_and_bonds_button.on_clicked = set_sites_bonds_clicked
+         
+        self.auto_detect_sources_button = ui.create_push_button_widget('Auto-detect sources')
+        self.auto_detect_sources_button.on_clicked = auto_detect_sources_clicked
         
         self.add_sources_button = ui.create_push_button_widget('Add sources')
         self.add_sources_button.on_clicked = add_sources_clicked
@@ -131,6 +153,15 @@ class AtomManipDelegate:
         
         self.find_paths_button = ui.create_push_button_widget(_('Find paths'))
         self.find_paths_button.on_clicked = find_paths_clicked
+ 
+        self.open_conceptional_plot_button = ui.create_push_button_widget('Conceptional plot')
+        self.open_conceptional_plot_button.on_clicked = open_conceptional_plot_clicked
+       
+        self.call_auto_manipulator_button = ui.create_push_button_widget(_('Start Auto-Manipulator'))
+        self.call_auto_manipulator_button.on_clicked = call_auto_manipulator_clicked
+        
+        self.stop_auto_manipulator_button = ui.create_push_button_widget(_('Stop Auto-Manipulator'))
+        self.stop_auto_manipulator_button.on_clicked = stop_auto_manipulator_clicked
         
         # GUI labels and inputs
         self.sigma_field = ui.create_line_edit_widget()
@@ -164,7 +195,7 @@ class AtomManipDelegate:
         ir_row_input_col_noisetol_row.add(self.noise_tolerance_field)
         
         ir_row_input_col.add(ir_row_input_col_sig_row)
-        ir_row_input_col.add_spacing(5)
+        ir_row_input_col.add_spacing(2)
         ir_row_input_col.add(ir_row_input_col_noisetol_row)
         ir_row_input_col.add_stretch()
         
@@ -174,7 +205,7 @@ class AtomManipDelegate:
     
         ir_row.add_spacing(5)
         ir_row.add(ir_row_input_col)
-        ir_row.add_spacing(5)
+        ir_row.add_spacing(2)
         ir_row.add(ir_row_button_col)
         ir_row.add_stretch()
         
@@ -192,7 +223,7 @@ class AtomManipDelegate:
         sb_row_input_col_drawn_fraction_row.add(self.drawn_fraction_field)
         
         sb_row_input_col.add(sb_row_input_col_maxlength_row)
-        sb_row_input_col.add_spacing(5)
+        sb_row_input_col.add_spacing(2)
         sb_row_input_col.add(sb_row_input_col_drawn_fraction_row)
         sb_row_input_col.add_stretch()
         
@@ -202,16 +233,18 @@ class AtomManipDelegate:
     
         sb_row.add_spacing(5)
         sb_row.add(sb_row_input_col)
-        sb_row.add_spacing(5)
+        sb_row.add_spacing(2)
         sb_row.add(sb_row_button_col)
         sb_row.add_stretch()
         
         # Sources and targets row
         st_row = ui.create_row_widget()
         st_row.add_spacing(5)
-        st_row.add(self.add_sources_button)
-        st_row.add_spacing(5)
         st_row.add(self.add_targets_button)
+        st_row.add_spacing(2)
+        st_row.add(self.add_sources_button)
+        st_row.add_spacing(2)
+        st_row.add(self.auto_detect_sources_button)
         st_row.add_stretch()
         
         # Path finding row
@@ -220,17 +253,35 @@ class AtomManipDelegate:
         pf_row.add(self.find_paths_button)
         pf_row.add_stretch()
         
+        # Conceptional plot row
+        cp_row = ui.create_row_widget()
+        cp_row.add_spacing(5)
+        cp_row.add(self.open_conceptional_plot_button)
+        cp_row.add_stretch()
+        
+        # Auto-Manipulator row
+        am_row = ui.create_row_widget()
+        am_row.add_spacing(5)
+        am_row.add(self.call_auto_manipulator_button)
+        am_row.add_spacing(2)
+        am_row.add(self.stop_auto_manipulator_button)
+        am_row.add_stretch()
+        
         # Placeholder for new rows
         pass
         
         # Building main column
         main_col.add(ir_row)
-        main_col.add_spacing(10)
+        main_col.add_spacing(2)
         main_col.add(sb_row)
-        main_col.add_spacing(5)
+        main_col.add_spacing(2)
         main_col.add(st_row)
-        main_col.add_spacing(10)
+        main_col.add_spacing(2)
         main_col.add(pf_row)
+        main_col.add_spacing(2)
+        main_col.add(cp_row)
+        main_col.add_spacing(4)
+        main_col.add(am_row)
         pass #TODO new rows come added here
         main_col.add_stretch()
 
@@ -258,7 +309,10 @@ class AtomManipDelegate:
                 self.processed_data_item = self.dc.create_data_item_from_data_and_metadata(xdata,
                                                                 title='Local Maxima of ' + self.source_data_item.title)
             self.processed_data_item.title = 'Local Maxima of ' + self.source_data_item.title
-
+            
+            #TOOD debug this. get calibration data from source data item
+            #self.processed_data_item.set_dimensional_calibrations(
+            #        self.source_data_item.dimensional_calibrations)
             
             self.picobj = ir.Picture(self.source_data_item.data, self.source_data_item.title,\
                                 self.sigma, self.noise_tolerance)
@@ -307,8 +361,6 @@ class AtomManipDelegate:
             return
         
         maxima = self.picobj.maxima[-1] #TODO see above
-        indx_foreigns = self.picobj.indx_substitutionals[-1] #TODO: change array-behavior
-        print("indices foreigns  " + str(indx_foreigns))
         
         def thread_this():
             #TODO
@@ -321,7 +373,6 @@ class AtomManipDelegate:
             
             with self.dc.library.data_ref_for_data_item(self.processed_data_item):
                 shape = self.processed_data_item.xdata.data_shape
-                ellipse_relative_size = 0.05
                 
                 # Delete old 
                 for region in self.processed_data_item.regions:
@@ -345,25 +396,10 @@ class AtomManipDelegate:
                     self.processed_data_item.regions[i].graphic_id = len(self.sites) #TODO: maybe change somehow. Attribute graphic_id is abused
 
                 # Set bonds
-                print("======= Set bonds =======")
-                bonds = pf.Bonds(self.sites, self.maxlength)
-                
-                # Set and display automatically detected sources
-                for i in indx_foreigns:
-                    loc = maxima[i] #TODO: probably change to self.sites[i].coords
-                    #TODO: rework!!! unsure if correct point_graphics is taken
-                    thisatom = pf.Atom(self.sites[i], 'dummy-element')
-                    self.sources = np.append(self.sources, thisatom)
-                    reg = self.processed_data_item.add_rectangle_region(
-                            loc[0]/shape[0], loc[1]/shape[1],
-                            ellipse_relative_size, ellipse_relative_size)
-                    
-                    # Mutual assignment
-                    reg.graphic_id = np.size(self.sources)
-                    self.sources[-1].uuid_graphic = reg.uuid #TODO: see above
-                
-                # Set and display bonds
-                for b in bonds.members:
+                print("======= Set and display bonds =======")
+                self.bonds = pf.Bonds(self.sites, self.maxlength)
+
+                for b in self.bonds.members:
                     y1 = b.coords()[0][0]
                     x1 = b.coords()[0][1]
                     y2 = b.coords()[1][0]
@@ -384,6 +420,28 @@ class AtomManipDelegate:
         self.t2 = threading.Thread(target = thread_this, name = 'dothat')
         self.t2.start()
     
+    # Auto-detect and display sources
+    def auto_detect_sources(self):
+        maxima = self.picobj.maxima[-1] #TODO see above
+        self.picobj.detect_substitutionals()
+        indx_foreigns = self.picobj.indx_substitutionals[-1] #TODO change array-behavior
+        print("indices foreigns  " + str(indx_foreigns))
+        
+        shape = self.processed_data_item.xdata.data_shape
+        ellipse_relative_size = 0.05
+        for i in indx_foreigns:
+            loc = maxima[i] #TODO: probably change to self.sites[i].coords
+            #TODO: rework!!! unsure if correct point_graphics is taken
+            thisatom = pf.Atom(self.sites[i], 'dummy-element')
+            self.sources = np.append(self.sources, thisatom)
+            reg = self.processed_data_item.add_rectangle_region(
+                            loc[0]/shape[0], loc[1]/shape[1],
+                            ellipse_relative_size, ellipse_relative_size)
+                    
+            # Mutual assignment
+            reg.graphic_id = np.size(self.sources)
+            self.sources[-1].uuid_graphic = reg.uuid #TODO: see above
+            
     # Add sources
     def add_sources(self, selection):
         if self.processed_data_item is None:
@@ -465,6 +523,34 @@ class AtomManipDelegate:
                 self.paths.determine_paths()
         self.t5 = threading.Thread(target = thread_this)
         self.t5.start()
+        
+    # Auto-Manipulator
+    def call_auto_manipulator(self):
+        def thread_that():
+            try:
+                am.AM(self.paths, self.api)
+                logging.info("Calling Auto-Manipulator...")
+            except:
+                logging.info("Error #002")
+        self.t6 = threading.Thread(target = thread_that)
+        self.t6.start()
+        
+    # Conceptional plot
+    def open_conceptional_plot(self):
+        def pfplt_func():
+            fig = plt.figure() # 57 = pf
+            ax = fig.add_subplot(1, 1, 1)
+            pfplt.plt_sites(ax, self.sites)
+            pfplt.plt_bonds(ax, self.bonds)
+            pfplt.plt_sources(ax, self.sources)
+            pfplt.plt_targets(ax, self.targets)
+            plt.gca().invert_yaxis()
+            try:
+                plt.show()
+            except:
+                pass
+        pfplt_func() # This does only work in the main thread !
+        print("Opening conceptional plot finished.")
         
 
 class AtomManipExtension(object):

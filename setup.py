@@ -10,7 +10,7 @@ from distutils.extension import Extension
 
 setuptools.setup(
     name="dedcode_atmenmanip",
-    version="0.1.4",
+    version="0.1.5",
     author="Andreas Postl",
     author_email="dedicated.codes@gmail.com",
     description= "A Nion swift plug-in for atom manipulation using an STEM (ATMEN project)",

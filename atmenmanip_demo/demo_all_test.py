@@ -38,7 +38,7 @@ arr_noisetol = (5e-5, 5e-4)
 
 for k in range(1, 2):
     folder = "."
-    filename = "GonQF_{:02d}".format(k+5) + ".npy"
+    filename = "GonQF_{:02d}".format(k+1) + ".npy"
     pic = np.load(folder + "/" + filename)
     sigma = arr_sigma[k]
     noisetol = arr_noisetol[k]

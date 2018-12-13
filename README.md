@@ -4,3 +4,8 @@ Dedicated Codes
 
 Atom manipulation
 ATMEN project
+
+-----
+
+Test library available on github:
+https://github.com/arpostl/atmenmanip_auxiliary
